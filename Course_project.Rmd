@@ -1,0 +1,75 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Ewout Noyons"
+date: "24 May 2015"
+output: html_document
+---
+
+## Summary
+
+In this document we will describe how we created a model to predict the manner in which a test person did a fitness exercise. The data come from an experiment on weight lifting exercises. Wearing accelerometors on various parts of their bodies, participants were asked to perform a set of 10 repetitions of the 'Unilateral Dumbbell Biceps Curl'. They were instructed to do the exercise in five different fashions: one correctly and four incorrectly with specific mistakes. More information on the experiment can be found at http://groupware.les.inf.puc-rio.br/har.
+
+## Data preperation
+
+The first step is to load the data into R. A preliminary exploration of the data revealed that NA values were recorded in multiple ways. With the na.strings argument we can set all to missing.
+
+```{r}
+rawData <- read.csv("pml-training.csv", na.strings = c("NA", "DIV/0!", ""))
+dim(rawData)
+```
+
+The dataset consists of 19,622 observations on 160 variables. As mentioned, there are many missing values in the data. To investigate to severity of this issue, we will create a vector that counts the number of missing values for each variable. 
+
+```{r}
+missingValues <- vector(mode = "integer")
+for (i in 1:160) {
+        missingValues <- c(missingValues, sum(is.na(rawData[i])))
+}
+table(missingValues)
+```
+
+The results show that only for 60 variables there are no missing values. The other 100 variables contain very little information as most values are missing. Accordingly, we will subset the data to include only variables with no missing values.
+
+```{r}
+rawData <- rawData[, missingValues == 0]
+dim(rawData)
+```
+
+A second issue is that some variables are not helpful for our goal to predict the manner in which a test person did the exercise. For example, the first variable in the dataset 'X' is just a container for the row number. Without much further discussion, we will remove these variables from our data.
+
+```{r}
+rawData <- rawData[, 8:60]
+dim(rawData)
+```
+
+The results show that we are left with 19,622 observations on 53 variables. From this data, we will create the train and test sets to build and validate our prediction model. Since this is a rather large dataset, I chose to assign 60 percent to the training set, and the remaining 40 percent to the test set. With less observations I would have preferred to assign a larger share to the training set as we need the information to build the model.
+
+```{r}
+library(caret)
+inTrain <- createDataPartition(y = rawData$classe, p = 0.6, list = FALSE)
+training <- rawData[inTrain,]
+testing <- rawData[-inTrain,]
+dim(training)
+```
+
+## Model building
+
+The algorithm we use to predict the execution of the exercise (the 'classe' variable in the dataset) is Random Forest. There are a number of reasons to choose this algorithm. First, the algorithm handles various types of data well. There is no need to convert or preprocess variables, which makes data preparation relatively easy. Second, the Random Forest algorithm is generally speaking very accurate. A disadvantage is that the algorithm may require a lot of computation time. To mitigate this issue, we tweak the train control parameters. We then train the model and store the results in the 'modFit' variable.
+
+```{r, cache = TRUE}
+train_control <- trainControl(method = "boot", number = 4)
+modFit <- train(classe ~ ., data = training, method = "rf",
+                trControl = train_control, ntree = 50, prox = TRUE)
+modFit
+```
+
+## Model evalution and out of sample error
+
+The evaluate our model, we will use the algorithm to predict the type of exercise in the test set. This will give us insight in the out of sample error. To help us understand the outcome, we will use a confusion matrix.
+
+```{r}
+predictions <- predict(modFit, newdata = testing)
+confusionMatrix(predictions, testing$classe)
+```
+
+The results show that the Random Forest algorithm performed really well. The accuracy of the model is over 99 percent. Based on this model, we managed to predict all 20 test cases correctly.
